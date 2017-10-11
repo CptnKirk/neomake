@@ -407,7 +407,6 @@ command! NeomakeTestsMonkeyPatchUndo call s:undo_monkeypatch(<f-args>)
 function! s:After()
   if exists('#neomake_automake')
     au! neomake_automake
-    au! neomake_automake_update
   endif
 
   Restore

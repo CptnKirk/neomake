@@ -291,7 +291,6 @@ function! neomake#configure#automake_for_buffer(string_or_dict_config, ...) abor
             endif
         endif
     endif
-    call setbufvar(bufnr, 'neomake_automake_tick', [])
     return call('s:configure_buffer', [bufnr] + [a:string_or_dict_config, options])
 endfunction
 
@@ -311,6 +310,7 @@ function! s:configure_buffer(bufnr, ...) abort
     let bufnr = +a:bufnr
     let ft = getbufvar(bufnr, '&filetype')
     let config = s:getbufvar(bufnr, 'neomake', {})
+    let old_config = deepcopy(config)
     if a:0
         let args = [config, a:1]
         if a:0 > 1 && has_key(a:2, 'delay')
@@ -321,6 +321,7 @@ function! s:configure_buffer(bufnr, ...) abort
     endif
 
     " Register the buffer, and remember if it is custom.
+    let old_registration = get(s:configured_buffers, bufnr, {})
     let s:configured_buffers[bufnr] = {'custom': a:0 > 0}
 
     " Set enabled_makers.
@@ -334,12 +335,22 @@ function! s:configure_buffer(bufnr, ...) abort
     let s:configured_buffers[bufnr].enabled_makers = enabled_makers
     call s:debug_log(printf('configured buffer for ft=%s (%s)',
                 \ ft, empty(enabled_makers) ? 'no enabled makers' : join(map(copy(enabled_makers), "type(v:val) == type('') ? v:val : v:val.name"), ', ').' ('.source.')'), {'bufnr': bufnr})
+    let s = s:configured_buffers[bufnr]
+    if old_config != config || old_registration != s:configured_buffers[bufnr]
+        call setbufvar(bufnr, 'neomake_automake_tick', [])
+    endif
 
     if a:0
       " Setup autocommands etc (when called manually)?!
       call neomake#configure#automake()
     endif
     return config
+endfunction
+
+function! s:maybe_reconfigure_buffer(bufnr) abort
+  if has_key(s:configured_buffers, a:bufnr)
+      call s:configure_buffer(a:bufnr)
+  endif
 endfunction
 
 function! s:disabled_for_ft(bufnr, ...) abort
@@ -463,6 +474,6 @@ function! neomake#configure#automake(...) abort
     augroup END
     augroup neomake_automake_update
         au!
-        autocmd FileType * call s:configure_buffer(expand('<abuf>'))
+        autocmd FileType * call s:maybe_reconfigure_buffer(expand('<abuf>'))
     augroup END
 endfunction

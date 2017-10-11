@@ -137,16 +137,20 @@ Execute (Automake supports custom buffer config):
   AssertNeomakeMessage 'automake: buffer was not changed.', 3
 
   " Resetting global config does not reset tick?!
-  call neomake#configure#automake({
-  \ 'BufWinEnter': {'delay': 0}})
+  call neomake#configure#automake({'BufWinEnter': {'delay': 0}})
   doautocmd BufWinEnter
   AssertNeomakeMessage 'automake: buffer was not changed.', 3
   AssertEqual len(g:neomake_test_finished), 1
 
-  " Resetting buffer config does reset tick.
-  call neomake#configure#automake_for_buffer({'CursorHold': {'delay': 0}})
+  " Changing buffer config resets tick.
+  call neomake#configure#automake_for_buffer({'BufWinEnter': {'delay': 0}}, 0, ['another_maker'])
+  doautocmd BufWinEnter
+  AssertNeomakeMessage 'Maker not found (for filetype neomake_tests): another_maker.'
+
+  " Changing buffer options resets tick.
+  call neomake#configure#automake_for_buffer({'CursorHold': {'delay': 0}}, 0, ['another_maker'])
   doautocmd CursorHold
-  AssertEqual len(g:neomake_test_finished), 2
+  AssertNeomakeMessage 'Maker not found (for filetype neomake_tests): another_maker.'
 
   bwipe
 
@@ -197,9 +201,6 @@ Execute (Automake):
   new
   let b:neomake_tempfile_enabled = 1
   setfiletype neomake_tests
-  AssertNeomakeMessage 'automake: configured buffer for ft=neomake_tests (maker_without_exe (default)).'
-  Save g:neomake_test_enabledmakers
-  let g:neomake_test_enabledmakers = ['true']
   normal! iline1
 
   " InsertLeave triggered with 10ms timer.
@@ -207,18 +208,33 @@ Execute (Automake):
     NeomakeTestsWaitForNextMessage
   endif
 
+  AssertNeomakeMessage 'automake: handling event InsertLeave.'
+  AssertNeomakeMessage 'automake: configured buffer for ft=neomake_tests (maker_without_exe (default)).'
   AssertNeomakeMessage 'automake: automake for event InsertLeave.'
   AssertNeomakeMessage 'Exe (maker_without_exe) of auto-configured maker maker_without_exe is not executable, skipping.'
-  AssertNeomakeMessage 'Nothing to make: no valid makers.'
+  NeomakeTestsWaitForFinishedJobs
+  AssertEqual len(g:neomake_test_jobfinished), 0
+
+  " Changing the global does not affect config.
+  Save g:neomake_test_enabledmakers
+  let g:neomake_test_enabledmakers = ['true']
+  doautocmd InsertLeave
+  NeomakeTestsWaitForFinishedJobs
+  AssertEqual len(g:neomake_test_jobfinished), 0
+  AssertNeomakeMessage 'automake: buffer was not changed.', 3
 
   " TODO: better to have automake.ft.neomake_tests.enabled_makers ?!
   call neomake#config#set('ft.neomake_tests.automake.enabled_makers', ['true'])
   doautocmd FileType
   AssertNeomakeMessage 'automake: configured buffer for ft=neomake_tests (true (global)).'
+  NeomakeTestsWaitForFinishedJobs
   AssertEqual len(g:neomake_test_jobfinished), 0
 
+  " Tick was not reset on FileType-reconfig (no changes).
   doautocmd InsertLeave
-  AssertNeomakeMessage 'automake: buffer was not changed.', 3
+  NeomakeTestsWaitForFinishedJobs
+  AssertEqual len(g:neomake_test_jobfinished), 0
+
   normal! ifoo
   doautocmd InsertLeave
   NeomakeTestsWaitForNextFinishedJob
